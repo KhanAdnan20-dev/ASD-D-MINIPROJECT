@@ -56,6 +56,25 @@ class CandidatePOI(BaseModel):
     lng: float
 
 
+class SelectedPOI(BaseModel):
+    id: int | str = Field(description="Unique identifier or sequence index of the POI")
+    name: str
+    category: str
+    lat: float
+    lng: float
+    route_fraction: float = Field(ge=0.0, le=1.0, description="Normalized position along the route (0.0=origin, 1.0=dest)")
+    distance_from_route_km: float = Field(ge=0.0, description="Perpendicular distance from the nearest point on the route in km")
+    estimated_detour_km: float = Field(ge=0.0, description="Estimated round-trip detour cost (2 * distance_from_route_km)")
+
+
+class SolverResult(BaseModel):
+    selected_stops: list[SelectedPOI]
+    total_estimated_detour_km: float = 0.0
+    candidate_count: int = 0
+    selected_count: int = 0
+    solver_status: str = Field(description="Status of the solver: success, no_candidates, or no_feasible_stops")
+
+
 class PlanResponse(BaseModel):
     origin: GeocodedLocation
     destination: GeocodedLocation
@@ -63,5 +82,7 @@ class PlanResponse(BaseModel):
     route_geometry: list[list[float]]
     distance_km: float
     duration_mins: float
-    candidate_pois: list[CandidatePOI]
-    solver_status: str = "not_implemented"
+    candidate_pois: list[CandidatePOI] = []
+    selected_pois: list[SelectedPOI] = []
+    solver_status: str = "no_candidates"
+    total_estimated_detour_km: float = 0.0
