@@ -10,7 +10,11 @@ pipeline {
 
         stage('Backend dependencies and tests') {
             steps {
-                bat 'python --version && python -m venv .venv && .venv\\Scripts\\python.exe -m pip install -r backend\\requirements.txt && .venv\\Scripts\\python.exe -m pytest backend\\tests'
+                bat '''
+if exist .venv rmdir /s /q .venv
+if exist .venv exit /b 1
+py -3.11 --version && py -3.11 -m venv .venv && .venv\\Scripts\\python.exe -m pip install -r backend\\requirements.txt && .venv\\Scripts\\python.exe -m pytest backend\\tests
+'''
             }
         }
 
