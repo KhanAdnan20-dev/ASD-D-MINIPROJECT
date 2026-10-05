@@ -31,55 +31,63 @@ not depend on PostgreSQL or the future routing features.
 }
 ```
 
-## Planned endpoint (not implemented)
+### `POST /api/route/plan`
 
-### `POST /api/route/optimize`
+Orchestrates full multi-stop route planning:
+1. Intent Parsing (IW-2)
+2. Nominatim Geocoding
+3. OSRM Road Routing
+4. Overpass + IW-3 Spatial Corridor POI Discovery
+5. IW-4 Deterministic Greedy Solver
 
-The eventual route endpoint will receive an origin, destination, task intents,
-and transport mode. Request models are present for this shape, but there is
-currently no route handler, intent parsing, POI selection, or optimization.
+Request payload:
+```json
+{
+  "origin": "Wadala",
+  "destination": "Bandra",
+  "intent": "Find a pharmacy from Wadala to Bandra",
+  "transport_mode": "driving"
+}
+```
 
-Example request:
-
+Response payload:
 ```json
 {
   "origin": {
-    "lat": 19.0556,
-    "lng": 72.8295
+    "name": "Wadala",
+    "display_name": "Wadala, Mumbai...",
+    "lat": 19.0269,
+    "lng": 72.8759
   },
   "destination": {
-    "lat": 19.0689,
-    "lng": 72.8223
+    "name": "Bandra",
+    "display_name": "Bandra, Mumbai...",
+    "lat": 19.0549,
+    "lng": 72.8402
   },
-  "intents": ["buy medicine", "eat"],
-  "transport_mode": "walking"
-}
-```
-
-Coordinates use latitude in `[-90, 90]` and longitude in `[-180, 180]`.
-Supported transport-mode values in the request model are `walking`, `driving`,
-and `cycling`. At least one non-empty intent is required.
-
-Planned response shape:
-
-```json
-{
-  "total_distance_km": 3.4,
-  "estimated_duration_mins": 48,
-  "optimized_sequence": [
-    {"name": "Bandra Wellness Pharmacy", "category": "pharmacy"}
+  "parsed_category": "pharmacy",
+  "distance_km": 8.96,
+  "duration_mins": 10.6,
+  "route_geometry": [[72.8759, 19.0269], "..."],
+  "candidate_pois": [
+    {"name": "Noble Plus", "category": "pharmacy", "lat": 19.0401, "lng": 72.8581}
   ],
-  "polyline_geometry": {
-    "type": "LineString",
-    "coordinates": [[72.8295, 19.0556], [72.8223, 19.0689]]
-  }
+  "selected_pois": [
+    {
+      "id": 1,
+      "name": "Utility Chemists",
+      "category": "pharmacy",
+      "lat": 19.0350,
+      "lng": 72.8594,
+      "route_fraction": 0.3837,
+      "distance_from_route_km": 0.02,
+      "estimated_detour_km": 0.04
+    }
+  ],
+  "solver_status": "success",
+  "total_estimated_detour_km": 1.77
 }
 ```
-
-The response values are illustrative only. Distance/time calculation, POI
-selection, stop ordering, and route geometry are not implemented. A future
-implementation should document its error responses and exact output fields
-when that behavior is defined.
 
 ## Frontend API base URL
 

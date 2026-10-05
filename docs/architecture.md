@@ -58,9 +58,9 @@ current API exposes no routing endpoint and the UI does not call the backend.
 | --- | --- |
 | React + Vite | Present the user interface. The current shell is a placeholder; a future wizard and map will live here. |
 | FastAPI | Validate requests and expose JSON endpoints. Only root and health endpoints are implemented so far. |
-| Intent parser | Planned module to map simple task phrases to POI categories. |
-| Spatial layer | Planned use of PostGIS and Shapely to find candidate POIs near a route corridor. |
-| Solver | Planned deterministic, greedy ordering of candidate stops; no optimizer is implemented yet. |
+| Intent parser | Deterministic keyword and phrase matching module (IW-2). |
+| Spatial layer | PostGIS and Shapely corridor filtering module (IW-3). |
+| Solver | Deterministic greedy minimum-detour multi-stop route optimizer (IW-4). |
 | PostgreSQL + PostGIS | Store POI attributes and WGS 84 point geometry (SRID 4326). |
 | Docker Compose | Run the frontend, backend, and database together for local development. |
 | Jenkins / GitHub Actions | Demonstrate automated tests and a frontend build. Deployment is not configured. |
