@@ -1,11 +1,66 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { MapContainer, TileLayer, Polyline, Marker, Popup, useMap } from 'react-leaflet'
+import L from 'leaflet'
 import './App.css'
+import { API_BASE_URL } from './config'
+
+/* ── Custom marker icons ──────────────────────────────────── */
+
+function makeIcon(color, size = 12) {
+  return L.divIcon({
+    className: 'custom-marker',
+    html: `<span style="
+      display:block;width:${size}px;height:${size}px;
+      border-radius:50%;background:${color};
+      border:2.5px solid #fff;
+      box-shadow:0 1px 6px rgba(0,0,0,.3);
+    "></span>`,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+    popupAnchor: [0, -size / 2],
+  })
+}
+
+const originIcon = makeIcon('#508568', 14)
+const destinationIcon = makeIcon('#637f9b', 14)
+const poiIcon = makeIcon('#d39b4a', 11)
+
+/* ── Map auto-fit ─────────────────────────────────────────── */
+
+function FitBounds({ bounds }) {
+  const map = useMap()
+  useEffect(() => {
+    if (bounds && bounds.length >= 2) {
+      map.fitBounds(bounds, { padding: [45, 45], maxZoom: 15 })
+    }
+  }, [map, bounds])
+  return null
+}
+
+/* ── Example prompts (pre-fill structured fields) ─────────── */
 
 const examplePrompts = [
-  'Find a pharmacy from Wadala to Bandra',
-  'Find a restaurant along my route',
-  'Find a hospital near my destination',
+  {
+    label: 'Find a pharmacy from Wadala to Bandra',
+    origin: 'Wadala',
+    destination: 'Bandra',
+    intent: 'pharmacy',
+  },
+  {
+    label: 'Find a restaurant from Andheri to Dadar',
+    origin: 'Andheri',
+    destination: 'Dadar',
+    intent: 'restaurant',
+  },
+  {
+    label: 'Find a hospital from Juhu to Kurla',
+    origin: 'Juhu',
+    destination: 'Kurla',
+    intent: 'hospital',
+  },
 ]
+
+/* ── Brand mark SVG ───────────────────────────────────────── */
 
 function BrandMark() {
   return (
@@ -26,58 +81,90 @@ function BrandMark() {
   )
 }
 
-function MapEmptyState() {
-  return (
-    <div className="map-empty-state">
-      <span className="map-empty-state__icon" aria-hidden="true">
-        <svg viewBox="0 0 48 48" fill="none">
-          <path
-            d="m5 12 12-5 14 5 12-5v29l-12 5-14-5-12 5V12Z"
-            stroke="currentColor"
-            strokeWidth="1.8"
-            strokeLinejoin="round"
-          />
-          <path
-            d="M17 7v29m14-24v29"
-            stroke="currentColor"
-            strokeWidth="1.8"
-          />
-          <path
-            d="M24 15a5 5 0 0 0-5 5c0 3.4 5 8 5 8s5-4.6 5-8a5 5 0 0 0-5-5Z"
-            fill="currentColor"
-          />
-          <circle cx="24" cy="20" r="1.6" fill="white" />
-        </svg>
-      </span>
-      <p className="map-empty-state__eyebrow">YOUR JOURNEY, VISUALIZED</p>
-      <h3>Your route will appear here</h3>
-      <p>
-        The interactive map will connect here when route planning is available.
-      </p>
-    </div>
-  )
-}
+/* ── Map empty state ──────────────────────────────────────── */
+
+/* ── Main application ─────────────────────────────────────── */
 
 function App() {
-  const [request, setRequest] = useState('')
-  const [notice, setNotice] = useState('')
+  const [origin, setOrigin] = useState('')
+  const [destination, setDestination] = useState('')
+  const [intent, setIntent] = useState('')
+  const [transportMode, setTransportMode] = useState('driving')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [result, setResult] = useState(null)
+  const mapRef = useRef(null)
 
-  function handleSubmit(event) {
+  /* ── Submit handler ──────────────────────────────────────── */
+
+  async function handleSubmit(event) {
     event.preventDefault()
-    if (!request.trim()) {
-      setNotice('Add a starting point, destination, and what you need along the way.')
+    if (!origin.trim() || !destination.trim() || !intent.trim()) {
+      setError('Please fill in all three fields: origin, destination, and what you need.')
       return
     }
 
-    setNotice(
-      'Your request is ready, but route planning is not connected yet. It has not been sent or calculated.',
-    )
+    setLoading(true)
+    setError('')
+    setResult(null)
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/route/plan`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          origin: origin.trim(),
+          destination: destination.trim(),
+          intent: intent.trim(),
+          transport_mode: transportMode,
+        }),
+      })
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        throw new Error(data.detail || `Server error (${response.status})`)
+      }
+
+      const data = await response.json()
+      setResult(data)
+    } catch (err) {
+      setError(err.message || 'Something went wrong. Please try again.')
+    } finally {
+      setLoading(false)
+    }
   }
 
-  function chooseExample(prompt) {
-    setRequest(prompt)
-    setNotice('')
+  /* ── Example prompt handler ──────────────────────────────── */
+
+  function chooseExample(example) {
+    setOrigin(example.origin)
+    setDestination(example.destination)
+    setIntent(example.intent)
+    setError('')
   }
+
+  /* ── Compute Leaflet data from result ────────────────────── */
+
+  const routeLatLngs = result
+    ? result.route_geometry.map(([lng, lat]) => [lat, lng])
+    : []
+
+  /* ── Format helpers ──────────────────────────────────────── */
+
+  function formatDistance(km) {
+    if (km < 1) return `${Math.round(km * 1000)} m`
+    return `${km.toFixed(1)} km`
+  }
+
+  function formatDuration(mins) {
+    if (mins < 1) return '< 1 min'
+    if (mins < 60) return `${Math.round(mins)} min`
+    const h = Math.floor(mins / 60)
+    const m = Math.round(mins % 60)
+    return m > 0 ? `${h} h ${m} min` : `${h} h`
+  }
+
+  /* ── Render ──────────────────────────────────────────────── */
 
   return (
     <main className="app-shell">
@@ -90,7 +177,7 @@ function App() {
           <span className="header-subtitle">Intelligent Route Planning</span>
           <span className="preview-badge">
             <span className="preview-badge__dot" />
-            PRODUCT PREVIEW
+            LIVE DEMO
           </span>
         </div>
       </header>
@@ -108,9 +195,9 @@ function App() {
           </h1>
           <p className="hero-description">
             Plan your journey naturally and find useful places along the way.
-            Tell IntentWay where you’re headed and what matters on the route.
+            Tell IntentWay where you&apos;re headed and what matters on the route.
           </p>
-          <div className="journey-flow" aria-label="How IntentWay will work">
+          <div className="journey-flow" aria-label="How IntentWay works">
             <span>Natural language</span>
             <span className="journey-flow__arrow" aria-hidden="true">→</span>
             <span>Useful places</span>
@@ -128,56 +215,121 @@ function App() {
             <span className="request-card__number" aria-hidden="true">01</span>
           </div>
 
-          <label className="request-label" htmlFor="journey-request">
-            Describe your journey
+          <label className="request-label" htmlFor="journey-origin">
+            Starting point
           </label>
-          <textarea
-            id="journey-request"
-            name="journey-request"
-            rows="3"
-            maxLength="300"
-            placeholder="e.g. Find a pharmacy while travelling from Wadala to Bandra"
-            value={request}
-            onChange={(event) => {
-              setRequest(event.target.value)
-              if (notice) setNotice('')
-            }}
+          <input
+            id="journey-origin"
+            className="request-input"
+            type="text"
+            placeholder="e.g. Wadala, Mumbai"
+            value={origin}
+            onChange={(e) => { setOrigin(e.target.value); if (error) setError('') }}
             required
           />
+
+          <label className="request-label" htmlFor="journey-destination">
+            Destination
+          </label>
+          <input
+            id="journey-destination"
+            className="request-input"
+            type="text"
+            placeholder="e.g. Bandra, Mumbai"
+            value={destination}
+            onChange={(e) => { setDestination(e.target.value); if (error) setError('') }}
+            required
+          />
+
+          <label className="request-label" htmlFor="journey-intent">
+            What do you need along the way?
+          </label>
+          <input
+            id="journey-intent"
+            className="request-input"
+            type="text"
+            placeholder="e.g. buy medicine, eat food, visit hospital"
+            value={intent}
+            onChange={(e) => { setIntent(e.target.value); if (error) setError('') }}
+            required
+          />
+
+          <label className="request-label" htmlFor="journey-mode">
+            Travel mode
+          </label>
+          <select
+            id="journey-mode"
+            className="request-input request-select"
+            value={transportMode}
+            onChange={(e) => setTransportMode(e.target.value)}
+          >
+            <option value="driving">Driving</option>
+            <option value="walking">Walking</option>
+            <option value="cycling">Cycling</option>
+          </select>
+
           <p className="input-hint">
-            Include where you’re starting, where you’re going, and what you need.
+            Enter real places — they are geocoded via OpenStreetMap.
           </p>
 
           <div className="examples">
             <p className="examples__label">TRY AN EXAMPLE</p>
             <div className="example-list">
-              {examplePrompts.map((prompt) => (
+              {examplePrompts.map((ex, i) => (
                 <button
                   className="example-chip"
-                  key={prompt}
-                  onClick={() => chooseExample(prompt)}
+                  key={i}
+                  onClick={() => chooseExample(ex)}
                   type="button"
                 >
-                  {prompt}
+                  {ex.label}
                   <span aria-hidden="true">↗</span>
                 </button>
               ))}
             </div>
           </div>
 
-          <button className="submit-button" disabled={!request.trim()} type="submit">
-            <span>Find my route</span>
-            <span className="submit-button__arrow" aria-hidden="true">→</span>
+          <button
+            className="submit-button"
+            disabled={loading || !origin.trim() || !destination.trim() || !intent.trim()}
+            type="submit"
+          >
+            <span>{loading ? 'Planning route…' : 'Find my route'}</span>
+            <span className="submit-button__arrow" aria-hidden="true">
+              {loading ? '' : '→'}
+            </span>
           </button>
-          {notice && (
-            <p className="request-notice" role="status">
-              <span aria-hidden="true">i</span>
-              {notice}
+
+          {loading && (
+            <div className="loading-bar" role="status" aria-label="Loading">
+              <div className="loading-bar__track" />
+            </div>
+          )}
+
+          {error && (
+            <p className="request-notice request-notice--error" role="alert">
+              <span aria-hidden="true">✕</span>
+              {error}
             </p>
           )}
-          <p className="request-footnote">
-            Route planning is in development. Your request stays on this page.
-          </p>
+
+          {result && !result.parsed_category && (
+            <p className="request-notice" role="status">
+              <span aria-hidden="true">i</span>
+              Could not match your intent to a known category. The route is
+              shown without POI stops. Try: &quot;buy medicine&quot;, &quot;eat food&quot;, or
+              &quot;visit hospital&quot;.
+            </p>
+          )}
+
+          {result && result.solver_status === 'not_implemented' && result.candidate_pois.length > 0 && (
+            <p className="request-notice request-notice--info" role="status">
+              <span aria-hidden="true">i</span>
+              {result.candidate_pois.length} candidate{' '}
+              {result.candidate_pois.length === 1 ? 'place' : 'places'} found
+              along your route. Stop optimization (IW-4) is not yet connected.
+            </p>
+          )}
         </form>
       </section>
 
@@ -188,12 +340,86 @@ function App() {
               <p className="section-kicker">THE BIG PICTURE</p>
               <h2>Journey preview</h2>
             </div>
-            <span className="map-status">
+            <span className={`map-status ${result ? 'map-status--live' : ''}`}>
               <span className="map-status__dot" />
-              AWAITING ROUTE
+              {result ? 'ROUTE LOADED' : 'AWAITING ROUTE'}
             </span>
           </div>
-          <MapEmptyState />
+
+          <div className="map-container-wrapper">
+            <MapContainer
+              center={[19.0760, 72.8777]}
+              zoom={12}
+              scrollWheelZoom
+              style={{ height: '100%', width: '100%', borderRadius: '8px' }}
+              ref={mapRef}
+            >
+              <TileLayer
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              />
+              {result && (
+                <FitBounds
+                  bounds={
+                    routeLatLngs.length > 0
+                      ? routeLatLngs
+                      : [
+                          [result.origin.lat, result.origin.lng],
+                          [result.destination.lat, result.destination.lng],
+                        ]
+                  }
+                />
+              )}
+
+              {/* Route polyline */}
+              {routeLatLngs.length > 0 && (
+                <Polyline
+                  positions={routeLatLngs}
+                  pathOptions={{
+                    color: '#287a58',
+                    weight: 5,
+                    opacity: 0.85,
+                    lineCap: 'round',
+                    lineJoin: 'round',
+                  }}
+                />
+              )}
+
+              {/* Origin marker */}
+              {result && (
+                <Marker position={[result.origin.lat, result.origin.lng]} icon={originIcon}>
+                  <Popup>
+                    <strong>Origin: {result.origin.name}</strong><br />{result.origin.display_name}
+                  </Popup>
+                </Marker>
+              )}
+
+              {/* Destination marker */}
+              {result && (
+                <Marker position={[result.destination.lat, result.destination.lng]} icon={destinationIcon}>
+                  <Popup>
+                    <strong>Destination: {result.destination.name}</strong><br />{result.destination.display_name}
+                  </Popup>
+                </Marker>
+              )}
+
+              {/* POI markers */}
+              {result && result.candidate_pois.map((poi, i) => (
+                <Marker key={i} position={[poi.lat, poi.lng]} icon={poiIcon}>
+                  <Popup>
+                    <strong>{poi.name}</strong><br />
+                    <em>{poi.category}</em>
+                  </Popup>
+                </Marker>
+              ))}
+            </MapContainer>
+            {!result && (
+              <div className="map-overlay-hint">
+                <p>Interactive Map Active · Enter journey details or click an example above</p>
+              </div>
+            )}
+          </div>
+
           <div className="map-legend" aria-label="Map legend">
             <span><i className="legend-dot legend-dot--origin" /> Starting point</span>
             <span><i className="legend-dot legend-dot--stop" /> Places along the way</span>
@@ -215,7 +441,9 @@ function App() {
               <span className="endpoint-marker endpoint-marker--start" />
               <div>
                 <span className="endpoint__label">ORIGIN</span>
-                <span className="endpoint__value">Not set</span>
+                <span className="endpoint__value">
+                  {result ? result.origin.name : 'Not set'}
+                </span>
               </div>
             </div>
             <span className="endpoint-connector" />
@@ -223,7 +451,9 @@ function App() {
               <span className="endpoint-marker endpoint-marker--end" />
               <div>
                 <span className="endpoint__label">DESTINATION</span>
-                <span className="endpoint__value">Not set</span>
+                <span className="endpoint__value">
+                  {result ? result.destination.name : 'Not set'}
+                </span>
               </div>
             </div>
           </div>
@@ -231,24 +461,62 @@ function App() {
           <div className="summary-metrics">
             <div className="metric">
               <span className="metric__label">DISTANCE</span>
-              <span className="metric__value">—</span>
+              <span className="metric__value">
+                {result ? formatDistance(result.distance_km) : '—'}
+              </span>
             </div>
             <div className="metric">
               <span className="metric__label">EST. TIME</span>
-              <span className="metric__value">—</span>
+              <span className="metric__value">
+                {result ? formatDuration(result.duration_mins) : '—'}
+              </span>
             </div>
           </div>
 
-          <div className="stops-empty">
-            <span className="stops-empty__icon" aria-hidden="true">＋</span>
-            <div>
-              <h3>Stops that make sense</h3>
-              <p>Relevant places will show here once a route can be calculated.</p>
+          {result && result.candidate_pois.length > 0 ? (
+            <div className="stops-list">
+              <div className="stops-list__header">
+                <span className="stops-list__icon" aria-hidden="true">◆</span>
+                <div>
+                  <h3>
+                    {result.candidate_pois.length} candidate{' '}
+                    {result.candidate_pois.length === 1 ? 'place' : 'places'}
+                  </h3>
+                  <p className="stops-list__note">
+                    Along your route · {result.parsed_category}
+                  </p>
+                </div>
+              </div>
+              <ul className="poi-list">
+                {result.candidate_pois.map((poi, i) => (
+                  <li key={i} className="poi-item">
+                    <span className="poi-item__dot" />
+                    <div>
+                      <span className="poi-item__name">{poi.name}</span>
+                      <span className="poi-item__category">{poi.category}</span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
             </div>
-          </div>
+          ) : (
+            <div className="stops-empty">
+              <span className="stops-empty__icon" aria-hidden="true">＋</span>
+              <div>
+                <h3>Stops that make sense</h3>
+                <p>
+                  {result
+                    ? 'No matching places were found along this route.'
+                    : 'Relevant places will show here once a route is planned.'}
+                </p>
+              </div>
+            </div>
+          )}
 
           <p className="summary-note">
-            No route or stop results are generated in this preview.
+            {result
+              ? 'Candidates shown are not optimized. Stop ordering (IW-4) is pending.'
+              : 'Plan a route to see real distance, time, and nearby places.'}
           </p>
         </aside>
       </section>

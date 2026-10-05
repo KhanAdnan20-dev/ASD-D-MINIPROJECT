@@ -773,11 +773,225 @@
   }
 }
 
+/* ── Structured input fields ──────────────────────────────── */
+
+.request-input {
+  width: 100%;
+  min-height: 42px;
+  padding: 10px 14px;
+  border: 1px solid #dce5de;
+  border-radius: 8px;
+  outline: none;
+  color: var(--ink);
+  background: #fcfdfb;
+  font: inherit;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.request-input::placeholder {
+  color: #9aa79f;
+}
+
+.request-input:focus {
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px rgb(40 122 88 / 12%);
+}
+
+.request-select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 5l3 3 3-3' stroke='%236b7e72' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 34px;
+  cursor: pointer;
+}
+
+/* ── Map container ────────────────────────────────────────── */
+
+.map-container-wrapper {
+  position: relative;
+  height: 420px;
+  margin-top: 19px;
+  border: 1px solid #e6ece7;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.map-container-wrapper .leaflet-container {
+  height: 100%;
+  width: 100%;
+  border-radius: 8px;
+}
+
+.map-overlay-hint {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(6px);
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 1px solid #dce5de;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--forest);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* ── Loading bar ──────────────────────────────────────────── */
+
+.loading-bar {
+  margin-top: 12px;
+  height: 3px;
+  border-radius: 3px;
+  background: #e5ece6;
+  overflow: hidden;
+}
+
+.loading-bar__track {
+  height: 100%;
+  width: 40%;
+  border-radius: 3px;
+  background: var(--green);
+  animation: loading-slide 1.2s ease-in-out infinite;
+}
+
+@keyframes loading-slide {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(350%); }
+}
+
+/* ── Notice variants ──────────────────────────────────────── */
+
+.request-notice--error {
+  border-color: #e5bbb8;
+  color: #6e3430;
+  background: #fdf0ef;
+}
+
+.request-notice--info {
+  border-color: #b8d4e5;
+  color: #2e536e;
+  background: #edf6fb;
+}
+
+/* ── Live map status ──────────────────────────────────────── */
+
+.map-status--live {
+  border-color: #bfd9c6;
+  color: #3d7a53;
+  background: #edf6ef;
+}
+
+.map-status--live .map-status__dot {
+  background: var(--green);
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* ── POI list ─────────────────────────────────────────────── */
+
+.stops-list {
+  margin-top: 21px;
+}
+
+.stops-list__header {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+}
+
+.stops-list__icon {
+  width: 27px;
+  height: 27px;
+  flex: 0 0 27px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  color: #d39b4a;
+  background: #fdf5e9;
+  font-size: 0.7rem;
+}
+
+.stops-list__header h3 {
+  margin: 1px 0 3px;
+  color: #405348;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.stops-list__note {
+  margin: 0;
+  color: #829087;
+  font-size: 0.65rem;
+}
+
+.poi-list {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.poi-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 11px;
+  border-radius: 6px;
+  transition: background-color 120ms ease;
+}
+
+.poi-item:hover {
+  background: #f5f8f5;
+}
+
+.poi-item__dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border-radius: 50%;
+  background: #d39b4a;
+}
+
+.poi-item__name {
+  display: block;
+  color: #3a4f41;
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.poi-item__category {
+  display: block;
+  color: #8a978e;
+  font-size: 0.62rem;
+  text-transform: capitalize;
+}
+
+/* ── Custom marker reset ──────────────────────────────────── */
+
+.custom-marker {
+  background: none !important;
+  border: none !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
   }
 }
