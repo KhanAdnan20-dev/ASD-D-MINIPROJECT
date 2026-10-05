@@ -65,6 +65,30 @@ services:
     networks:
       - intentway-network
 
+  nagios:
+    image: jasonrivers/nagios:latest
+    container_name: nagios
+    ports:
+      - "127.0.0.1:8080:80"
+    volumes:
+      - ./monitoring/nagios/nagios.cfg:/opt/intentway/nagios.cfg:ro
+      - ./monitoring/nagios/hosts.cfg:/opt/nagios/etc/objects/intentway-hosts.cfg:ro
+      - ./monitoring/nagios/services.cfg:/opt/nagios/etc/objects/intentway-services.cfg:ro
+    command:
+      - /bin/sh
+      - -c
+      - |
+        if grep -q 'IntentWay monitoring includes' /opt/nagios/etc/nagios.cfg; then
+          sed '/# IntentWay monitoring includes:/,$$d' /opt/nagios/etc/nagios.cfg > /tmp/nagios.cfg
+          cat /tmp/nagios.cfg > /opt/nagios/etc/nagios.cfg
+        fi
+        printf '\n' >> /opt/nagios/etc/nagios.cfg
+        cat /opt/intentway/nagios.cfg >> /opt/nagios/etc/nagios.cfg
+        printf '\n' >> /opt/nagios/etc/nagios.cfg
+        exec /usr/local/bin/start_nagios
+    networks:
+      - intentway-network
+
 volumes:
   postgres-data:
 
