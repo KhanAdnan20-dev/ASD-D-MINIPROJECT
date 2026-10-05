@@ -10,13 +10,13 @@ pipeline {
 
         stage('Backend dependencies and tests') {
             steps {
-                sh 'python3 -m venv .venv && . .venv/bin/activate && python -m pip install -r backend/requirements.txt && python -m pytest backend/tests'
+                bat 'python --version && python -m venv .venv && .venv\\Scripts\\python.exe -m pip install -r backend\\requirements.txt && .venv\\Scripts\\python.exe -m pytest backend\\tests'
             }
         }
 
         stage('Frontend dependencies and build') {
             steps {
-                sh 'npm ci --prefix frontend && npm run build --prefix frontend'
+                bat 'cd /d "%WORKSPACE%\\frontend" && npm ci && npm run build'
             }
         }
     }
