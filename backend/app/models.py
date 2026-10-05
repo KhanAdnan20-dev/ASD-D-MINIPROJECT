@@ -28,3 +28,40 @@ class RouteRequest(BaseModel):
         if not intents or any(not intent.strip() for intent in intents):
             raise ValueError("At least one non-empty intent is required.")
         return [intent.strip() for intent in intents]
+
+
+# ---------------------------------------------------------------------------
+# Route planning models (used by POST /api/route/plan)
+# ---------------------------------------------------------------------------
+
+
+class PlanRequest(BaseModel):
+    origin: str = Field(min_length=1)
+    destination: str = Field(min_length=1)
+    intent: str = Field(min_length=1)
+    transport_mode: Literal["walking", "driving", "cycling"] = "driving"
+
+
+class GeocodedLocation(BaseModel):
+    name: str
+    display_name: str
+    lat: float
+    lng: float
+
+
+class CandidatePOI(BaseModel):
+    name: str
+    category: str
+    lat: float
+    lng: float
+
+
+class PlanResponse(BaseModel):
+    origin: GeocodedLocation
+    destination: GeocodedLocation
+    parsed_category: str | None
+    route_geometry: list[list[float]]
+    distance_km: float
+    duration_mins: float
+    candidate_pois: list[CandidatePOI]
+    solver_status: str = "not_implemented"
