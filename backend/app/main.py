@@ -1,3 +1,4 @@
+import re
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -12,7 +13,8 @@ from app.models import (
     PlanResponse,
 )
 from app.poi_discovery import discover_pois_along_route
-from app.routing import get_road_route
+from app.routing import get_multi_stop_route, get_road_route
+from app.solver import solve_route_stops
 
 settings = get_settings()
 
@@ -31,8 +33,6 @@ app.add_middleware(
 )
 
 
-import re
-
 def extract_origin_destination_from_text(text: str) -> tuple[str | None, str | None]:
     """Extract origin and destination from text like 'from Wadala to Bandra'."""
     pattern = r"(?:from|starting from|start at)\s+([A-Za-z0-9\s,.-]+?)\s+(?:to|heading to|headed to)\s+([A-Za-z0-9\s,.-]+)"
@@ -40,7 +40,6 @@ def extract_origin_destination_from_text(text: str) -> tuple[str | None, str | N
     if match:
         orig = match.group(1).strip()
         dest = match.group(2).strip()
-        # Strip trailing intent fragments if any
         dest = re.split(r"\s+(?:for|to get|to find|to buy)\s+", dest, flags=re.IGNORECASE)[0].strip()
         return orig, dest
     return None, None
@@ -50,21 +49,23 @@ def extract_intent_category(intent_text: str | None) -> str | None:
     """Resolve POI category using IW-2 parse_intent with graceful category keyword fallback."""
     if not intent_text:
         return None
-    # 1. Primary: Deterministic IW-2 phrase parser
     category = parse_intent(intent_text)
     if category:
         return category
 
-    # 2. Secondary: Direct category name matching if phrase parser didn't match
     lower = intent_text.casefold()
     if any(k in lower for k in ("pharmacy", "chemist", "drugstore", "medical store", "medicine", "tablets", "tablet")):
         return "pharmacy"
-    if any(k in lower for k in ("restaurant", "food", "cafe", "dinner", "lunch", "eat", "dining")):
+    if any(k in lower for k in ("restaurant", "food", "cafe", "dinner", "lunch", "eat", "dining", "coffee")):
         return "restaurant"
-    if any(k in lower for k in ("hospital", "clinic", "doctor", "health", "physician", "checkup")):
+    if any(k in lower for k in ("hospital", "clinic", "doctor", "health", "physician", "checkup", "medical")):
         return "hospital"
-    if any(k in lower for k in ("grocery", "supermarket", "store", "market")):
-        return "grocery"
+    if any(k in lower for k in ("grocery", "supermarket", "store", "market", "convenience")):
+        return "supermarket"
+    if any(k in lower for k in ("fuel", "petrol", "gas", "diesel", "gas station")):
+        return "fuel"
+    if any(k in lower for k in ("bank", "atm", "cash")):
+        return "bank"
     return None
 
 
@@ -88,15 +89,16 @@ def plan_route(request: PlanRequest) -> PlanResponse:
 
     1. Parse intent using IW-2 intent parser (with fallback for explicit category keywords)
     2. Geocode origin and destination via Nominatim
-    3. Fetch road route via OSRM
+    3. Fetch base road route via OSRM
     4. Discover real POIs via Overpass, filtered through IW-3 corridor
-    5. Return candidates (solver is not yet implemented — IW-4)
+    5. Solve minimum-detour stops via IW-4 greedy solver
+    6. Fetch FINAL multi-waypoint road route via OSRM through origin -> selected stops -> destination
+    7. Return full presentation-ready response
     """
     origin_query = request.origin.strip()
     dest_query = request.destination.strip()
     intent_query = request.intent.strip()
 
-    # Support single-prompt location extraction if passed in full request string
     if " from " in intent_query.lower() and " to " in intent_query.lower():
         extracted_orig, extracted_dest = extract_origin_destination_from_text(intent_query)
         if extracted_orig and extracted_dest:
@@ -122,15 +124,15 @@ def plan_route(request: PlanRequest) -> PlanResponse:
             detail=f"Could not geocode destination: '{dest_query}'",
         )
 
-    # ── Step 3: OSRM road routing ────────────────────────────────
-    road_route = get_road_route(
+    # ── Step 3: Base OSRM road routing ───────────────────────────
+    base_road_route = get_road_route(
         origin_geo["lat"],
         origin_geo["lng"],
         dest_geo["lat"],
         dest_geo["lng"],
         request.transport_mode,
     )
-    if not road_route:
+    if not base_road_route:
         raise HTTPException(
             status_code=502,
             detail="Could not compute a road route via OSRM.",
@@ -151,7 +153,28 @@ def plan_route(request: PlanRequest) -> PlanResponse:
         except Exception:
             pass  # Overpass may timeout; degrade gracefully
 
-    # ── Step 5: Return (solver not implemented — IW-4) ───────────
+    # ── Step 5: IW-4 Multi-stop Route Optimization ──────────────
+    solver_result = solve_route_stops(
+        origin=(origin_geo["lat"], origin_geo["lng"]),
+        destination=(dest_geo["lat"], dest_geo["lng"]),
+        route_geometry=base_road_route["coordinates"],
+        candidate_pois=candidate_pois,
+    )
+
+    # ── Step 6: Final OSRM Multi-Waypoint Road Route ─────────────
+    # If the solver selected stops, route through origin -> stop1 -> stop2 -> ... -> dest
+    final_road_route = base_road_route
+    if solver_result.selected_stops:
+        waypoints: list[tuple[float, float]] = [(origin_geo["lat"], origin_geo["lng"])]
+        for stop in solver_result.selected_stops:
+            waypoints.append((stop.lat, stop.lng))
+        waypoints.append((dest_geo["lat"], dest_geo["lng"]))
+
+        multi_route = get_multi_stop_route(waypoints, request.transport_mode)
+        if multi_route:
+            final_road_route = multi_route
+
+    # ── Step 7: Return Response ──────────────────────────────────
     return PlanResponse(
         origin=GeocodedLocation(
             name=request.origin,
@@ -166,9 +189,11 @@ def plan_route(request: PlanRequest) -> PlanResponse:
             lng=dest_geo["lng"],
         ),
         parsed_category=category,
-        route_geometry=road_route["coordinates"],
-        distance_km=road_route["distance_km"],
-        duration_mins=road_route["duration_mins"],
+        route_geometry=final_road_route["coordinates"],
+        distance_km=final_road_route["distance_km"],
+        duration_mins=final_road_route["duration_mins"],
         candidate_pois=candidate_pois,
-        solver_status="not_implemented",
+        selected_pois=solver_result.selected_stops,
+        solver_status=solver_result.solver_status,
+        total_estimated_detour_km=solver_result.total_estimated_detour_km,
     )

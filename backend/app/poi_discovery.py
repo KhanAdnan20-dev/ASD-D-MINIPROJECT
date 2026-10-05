@@ -18,21 +18,44 @@ OVERPASS_ENDPOINTS = [
 _TIMEOUT = 20.0
 
 _OSM_TAG_MAP: dict[str, list[tuple[str, str]]] = {
-    "pharmacy": [("amenity", "pharmacy")],
+    "pharmacy": [
+        ("amenity", "pharmacy"),
+        ("healthcare", "pharmacy"),
+        ("shop", "chemist"),
+        ("shop", "medical_supply"),
+    ],
     "restaurant": [
         ("amenity", "restaurant"),
         ("amenity", "fast_food"),
         ("amenity", "cafe"),
+        ("amenity", "food_court"),
     ],
     "hospital": [
         ("amenity", "hospital"),
         ("amenity", "clinic"),
         ("amenity", "doctors"),
+        ("healthcare", "hospital"),
+        ("healthcare", "clinic"),
     ],
     "grocery": [
         ("shop", "supermarket"),
         ("shop", "convenience"),
         ("shop", "grocery"),
+    ],
+    "supermarket": [
+        ("shop", "supermarket"),
+        ("shop", "convenience"),
+        ("shop", "grocery"),
+    ],
+    "cafe": [
+        ("amenity", "cafe"),
+    ],
+    "fuel": [
+        ("amenity", "fuel"),
+    ],
+    "bank": [
+        ("amenity", "bank"),
+        ("amenity", "atm"),
     ],
 }
 
@@ -47,8 +70,8 @@ def discover_pois_along_route(
     origin: Coordinate,
     destination: Coordinate,
     category: str,
-    corridor_buffer: float = 0.02,
-    limit: int = 15,
+    corridor_buffer: float = 0.035,
+    limit: int = 25,
 ) -> list[dict]:
     """Discover real OSM POIs of *category* inside the route corridor.
 
@@ -70,16 +93,16 @@ def discover_pois_along_route(
     corridor = build_corridor(route_line, corridor_buffer)
     south, west, north, east = _bbox_from_geometry(corridor)
 
-    # Build Overpass QL query for all matching OSM tag combinations
-    node_queries = "\n".join(
-        f'  node["{key}"="{value}"]({south},{west},{north},{east});'
+    # Build Overpass QL query across nodes, ways, and relations (nwr)
+    nwr_queries = "\n".join(
+        f'  nwr["{key}"="{value}"]({south},{west},{north},{east});'
         for key, value in tags
     )
     query = f"""[out:json][timeout:15];
 (
-{node_queries}
+{nwr_queries}
 );
-out body {limit};
+out center {limit * 3};
 """
 
     headers = {
@@ -103,24 +126,48 @@ out body {limit};
 
     # Filter results through the Shapely corridor polygon (IW-3 reuse)
     pois: list[dict] = []
+    seen_coords: set[tuple[float, float]] = set()
+
     for element in data.get("elements", []):
-        if "lat" not in element or "lon" not in element:
+        lat = element.get("lat")
+        lon = element.get("lon")
+        if lat is None or lon is None:
+            center = element.get("center")
+            if center:
+                lat = center.get("lat")
+                lon = center.get("lon")
+
+        if lat is None or lon is None:
             continue
 
-        point = Point(element["lon"], element["lat"])
+        coord_key = (round(lat, 4), round(lon, 4))
+        if coord_key in seen_coords:
+            continue
+
+        point = Point(lon, lat)
         if not corridor.covers(point):
             continue
 
-        name = element.get("tags", {}).get("name")
+        tags_dict = element.get("tags", {})
+        name = (
+            tags_dict.get("name")
+            or tags_dict.get("brand")
+            or tags_dict.get("operator")
+        )
         if not name:
-            continue
+            street = tags_dict.get("addr:street")
+            if street:
+                name = f"{category.title()} on {street}"
+            else:
+                name = f"{category.title()} (OSM #{element.get('id', 'Place')})"
 
+        seen_coords.add(coord_key)
         pois.append(
             {
                 "name": name,
                 "category": category,
-                "lat": element["lat"],
-                "lng": element["lon"],
+                "lat": float(lat),
+                "lng": float(lon),
             }
         )
 
