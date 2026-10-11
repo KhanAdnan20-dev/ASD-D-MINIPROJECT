@@ -52,7 +52,7 @@ def haversine_distance_km(lat1: float, lng1: float, lat2: float, lng2: float) ->
 
 
 def _extract_coord(val: Any) -> tuple[float, float] | None:
-    """Extract (lat, lng) from a Coordinate model, tuple, or dict."""
+    """Extract (lat, lng) as standard WGS84 floats from a Coordinate model, tuple, or dict."""
     if isinstance(val, Coordinate):
         return val.lat, val.lng
     if isinstance(val, (tuple, list)) and len(val) >= 2:

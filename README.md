@@ -102,3 +102,5 @@ seed data are exercised by starting the Compose stack.
   the future optimization request/response shape.
 - [Agile workflow](docs/agile-workflow.md) describes the proposed student
   development and CI workflow.
+- [DevOps architecture](docs/devops-architecture.md) details the end-to-end Jira,
+  Jenkins, Docker Compose, and Nagios CI/CD and monitoring architecture.
