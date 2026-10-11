@@ -58,6 +58,7 @@ def test_plan_route_endpoint_success_with_solver():
     with (
         patch("app.main.geocode", side_effect=mock_geocode),
         patch("app.main.get_road_route", return_value=mock_route),
+        patch("app.main.get_multi_stop_route", return_value=mock_route),
         patch("app.main.discover_pois_along_route", return_value=mock_pois),
     ):
         response = client.post(

@@ -1385,3 +1385,9 @@ body {
     animation-duration: 0.01ms !important;
   }
 }
+
+/* ── Dark Mode Map Tile Filter (API-Key-Free OpenStreetMap) ── */
+[data-theme="dark"] .map-viewport-frame .leaflet-tile-pane {
+  filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.35) brightness(0.75);
+}
+
