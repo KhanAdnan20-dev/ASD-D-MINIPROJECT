@@ -12,7 +12,16 @@ from app.models import Coordinate, POI
 
 DEFAULT_CORRIDOR_BUFFER = 0.015
 _SUPPORTED_CATEGORIES = frozenset(
-    {"pharmacy", "restaurant", "hospital", "grocery"}
+    {
+        "pharmacy",
+        "restaurant",
+        "hospital",
+        "grocery",
+        "supermarket",
+        "cafe",
+        "fuel",
+        "bank",
+    }
 )
 
 
